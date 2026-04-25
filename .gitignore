@@ -1,0 +1,17 @@
+node_modules/
+dist/
+.vite/
+coverage/
+*.tsbuildinfo
+
+.superpowers/
+.worktrees
+.worktrees/
+worktrees
+worktrees/
+
+backend/tmp/
+*.log
+
+.env
+.DS_Store
