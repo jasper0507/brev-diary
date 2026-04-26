@@ -3,6 +3,7 @@ package app
 import (
 	"errors"
 	"net/http"
+	"net/mail"
 	"strconv"
 	"strings"
 	"time"
@@ -56,7 +57,7 @@ func (s *server) register(c *gin.Context) {
 		return
 	}
 	email := strings.TrimSpace(strings.ToLower(req.Email))
-	if email == "" || len(req.Password) < 6 {
+	if !validEmail(email) || len(req.Password) < 6 {
 		errorJSON(c, http.StatusBadRequest, "invalid_credentials")
 		return
 	}
@@ -75,7 +76,12 @@ func (s *server) register(c *gin.Context) {
 		errorJSON(c, http.StatusConflict, "email_exists")
 		return
 	}
-	c.JSON(http.StatusCreated, gin.H{"data": gin.H{"user": gin.H{"id": user.ID, "email": user.Email, "kdfSalt": user.KDFSalt}}, "error": nil})
+	token, err := s.issueToken(user.ID)
+	if err != nil {
+		errorJSON(c, http.StatusInternalServerError, "token_failed")
+		return
+	}
+	c.JSON(http.StatusCreated, gin.H{"data": gin.H{"token": token, "user": gin.H{"id": user.ID, "email": user.Email, "kdfSalt": user.KDFSalt}}, "error": nil})
 }
 
 func (s *server) login(c *gin.Context) {
@@ -321,6 +327,11 @@ func validEntryDate(value string) bool {
 	}
 	parsed, err := time.Parse("2006-01-02", value)
 	return err == nil && parsed.Format("2006-01-02") == value
+}
+
+func validEmail(value string) bool {
+	address, err := mail.ParseAddress(value)
+	return err == nil && address.Address == value
 }
 
 func currentUser(c *gin.Context) models.User {
