@@ -1,5 +1,7 @@
 # 私密日记 Web 应用
 
+[![CI](https://github.com/jasper0507/brev-diary/actions/workflows/ci.yml/badge.svg)](https://github.com/jasper0507/brev-diary/actions/workflows/ci.yml)
+
 一个本地优先的私密日记 V1。前端在浏览器端加密日记内容，后端保存密文和必要元数据；项目提供可复现测试、生产化 Docker 构建和开源项目元文件，目标版本为 `v1.0.0`。
 
 ## 功能范围
