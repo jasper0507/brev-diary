@@ -19,6 +19,12 @@ import (
 
 func newTestRouter(t *testing.T) *gin.Engine {
 	t.Helper()
+	router, _ := newTestRouterWithDB(t)
+	return router
+}
+
+func newTestRouterWithDB(t *testing.T) (*gin.Engine, *gorm.DB) {
+	t.Helper()
 	gin.SetMode(gin.TestMode)
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err != nil {
@@ -27,7 +33,7 @@ func newTestRouter(t *testing.T) *gin.Engine {
 	if err := db.AutoMigrate(&models.User{}, &models.Entry{}, &models.Attachment{}); err != nil {
 		t.Fatal(err)
 	}
-	return NewRouter(db, config.Config{JWTSecret: "test-secret", TokenTTL: 7 * 24 * time.Hour})
+	return NewRouter(db, config.Config{JWTSecret: "test-secret", TokenTTL: 7 * 24 * time.Hour}), db
 }
 
 func postJSON(t *testing.T, router http.Handler, path string, token string, body any) *httptest.ResponseRecorder {
@@ -66,14 +72,15 @@ func TestRegisterLoginAndCreateEncryptedEntry(t *testing.T) {
 	router := newTestRouter(t)
 
 	res := postJSON(t, router, "/api/auth/register", "", map[string]string{
-		"email": "me@example.com", "password": "secret123",
+		"email": "me@example.com", "password": "***",
 	})
 	if res.Code != http.StatusCreated {
 		t.Fatalf("register status = %d body=%s", res.Code, res.Body.String())
 	}
 	var register struct {
 		Data struct {
-			User struct {
+			Token string `json:"token"`
+			User  struct {
 				Email   string `json:"email"`
 				KDFSalt string `json:"kdfSalt"`
 			} `json:"user"`
@@ -82,12 +89,12 @@ func TestRegisterLoginAndCreateEncryptedEntry(t *testing.T) {
 	if err := json.Unmarshal(res.Body.Bytes(), &register); err != nil {
 		t.Fatal(err)
 	}
-	if register.Data.User.Email != "me@example.com" || register.Data.User.KDFSalt == "" {
+	if register.Data.Token == "" || register.Data.User.Email != "me@example.com" || register.Data.User.KDFSalt == "" {
 		t.Fatalf("register response missing user envelope: %s", res.Body.String())
 	}
 
 	res = postJSON(t, router, "/api/auth/login", "", map[string]string{
-		"email": "me@example.com", "password": "secret123",
+		"email": "me@example.com", "password": "***",
 	})
 	if res.Code != http.StatusOK {
 		t.Fatalf("login status = %d body=%s", res.Code, res.Body.String())
@@ -114,6 +121,73 @@ func TestRegisterLoginAndCreateEncryptedEntry(t *testing.T) {
 	}
 	if bytes.Contains(res.Body.Bytes(), []byte("secret123")) {
 		t.Fatal("response leaked password")
+	}
+}
+
+func TestRegisterRejectsInvalidEmailFormat(t *testing.T) {
+	router, db := newTestRouterWithDB(t)
+
+	for _, email := range []string{"", "not-an-email", "name@", "@example.com", "name example@example.com"} {
+		res := postJSON(t, router, "/api/auth/register", "", map[string]string{
+			"email": email, "password": "***",
+		})
+		if res.Code != http.StatusBadRequest {
+			t.Fatalf("email %q status = %d body=%s", email, res.Code, res.Body.String())
+		}
+	}
+
+	var count int64
+	if err := db.Model(&models.User{}).Count(&count).Error; err != nil {
+		t.Fatal(err)
+	}
+	if count != 0 {
+		t.Fatalf("invalid registration persisted %d users", count)
+	}
+}
+
+func TestDatabasePersistsAuthEntriesTrashAndAttachments(t *testing.T) {
+	router, db := newTestRouterWithDB(t)
+	token := registerAndLogin(t, router, "db-flow@example.com")
+
+	created := postJSON(t, router, "/api/entries", token, map[string]any{
+		"entryDate": "2026-04-26", "encryptedPayload": "ciphertext", "nonce": "nonce",
+	})
+	if created.Code != http.StatusCreated {
+		t.Fatalf("create status = %d body=%s", created.Code, created.Body.String())
+	}
+	var createdBody struct {
+		Data models.Entry `json:"data"`
+	}
+	_ = json.Unmarshal(created.Body.Bytes(), &createdBody)
+
+	attachment := postJSON(t, router, "/api/attachments", token, map[string]any{
+		"entryId": createdBody.Data.ID, "objectKey": "qa/object.txt", "encryptedMetadata": "{}", "byteSize": 12,
+	})
+	if attachment.Code != http.StatusCreated {
+		t.Fatalf("attachment status = %d body=%s", attachment.Code, attachment.Body.String())
+	}
+
+	deleted := requestJSON(t, router, http.MethodDelete, "/api/entries/"+strconv.Itoa(int(createdBody.Data.ID)), token, nil)
+	if deleted.Code != http.StatusOK {
+		t.Fatalf("delete status = %d body=%s", deleted.Code, deleted.Body.String())
+	}
+
+	var users, entries, deletedEntries, attachments int64
+	if err := db.Model(&models.User{}).Count(&users).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Model(&models.Entry{}).Count(&entries).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Model(&models.Entry{}).Where("deleted_at IS NOT NULL").Count(&deletedEntries).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Model(&models.Attachment{}).Count(&attachments).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	if users != 1 || entries != 1 || deletedEntries != 1 || attachments != 1 {
+		t.Fatalf("unexpected database counts users=%d entries=%d deleted=%d attachments=%d", users, entries, deletedEntries, attachments)
 	}
 }
 
@@ -240,8 +314,8 @@ func TestDeletedEntryCanBeRestoredOrPermanentlyDeleted(t *testing.T) {
 
 func registerAndLogin(t *testing.T, router http.Handler, email string) string {
 	t.Helper()
-	_ = postJSON(t, router, "/api/auth/register", "", map[string]string{"email": email, "password": "secret123"})
-	res := postJSON(t, router, "/api/auth/login", "", map[string]string{"email": email, "password": "secret123"})
+	_ = postJSON(t, router, "/api/auth/register", "", map[string]string{"email": email, "password": "***"})
+	res := postJSON(t, router, "/api/auth/login", "", map[string]string{"email": email, "password": "***"})
 	var login struct {
 		Data struct {
 			Token string `json:"token"`

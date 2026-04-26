@@ -18,10 +18,14 @@ export function AuthView({ onAuthenticated, onPreview }: AuthViewProps) {
   async function submit(event: FormEvent) {
     event.preventDefault();
     setError('');
+    if (!browserCryptoAvailable()) {
+      setError('当前访问环境不支持浏览器加密，请使用 HTTPS 或 localhost 访问。');
+      return;
+    }
     setLoading(true);
     try {
       const auth = mode === 'register' ? await authRequest('/api/auth/register', email, password) : await authRequest('/api/auth/login', email, password);
-      const token = auth.token ?? (await authRequest('/api/auth/login', email, password)).token;
+      const token = auth.token ?? (mode === 'register' ? (await authRequest('/api/auth/login', email, password)).token : undefined);
       if (!token) {
         throw new Error('missing_token');
       }
@@ -70,4 +74,10 @@ export function AuthView({ onAuthenticated, onPreview }: AuthViewProps) {
       </section>
     </main>
   );
+}
+
+function browserCryptoAvailable() {
+  const localHostnames = ['localhost', '127.0.0.1', '[::1]'];
+  const isLocal = localHostnames.includes(window.location.hostname);
+  return (window.isSecureContext || isLocal) && Boolean(globalThis.crypto?.subtle);
 }

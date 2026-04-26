@@ -63,14 +63,11 @@ describe('diary interface', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('registers and logs in through the API envelope', async () => {
+  it('registers through the API envelope without a second login request', async () => {
     const user = userEvent.setup();
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
       const path = input.toString();
       if (path === '/api/auth/register') {
-        return { ok: true, json: async () => ({ data: { user: { email: 'me@example.com', kdfSalt: 'salt' } }, error: null }) } as Response;
-      }
-      if (path === '/api/auth/login') {
         return { ok: true, json: async () => ({ data: { token: 'token-123', user: { email: 'me@example.com', kdfSalt: 'salt' } }, error: null }) } as Response;
       }
       if (path === '/api/entries') {
@@ -86,9 +83,35 @@ describe('diary interface', () => {
     await user.click(screen.getByRole('button', { name: '创建账号' }));
 
     expect(fetchMock).toHaveBeenCalledWith('/api/auth/register', expect.objectContaining({ method: 'POST' }));
-    expect(fetchMock).toHaveBeenCalledWith('/api/auth/login', expect.objectContaining({ method: 'POST' }));
+    expect(fetchMock).not.toHaveBeenCalledWith('/api/auth/login', expect.anything());
     expect(JSON.parse(localStorage.getItem('diary.session') ?? '{}')).toEqual(expect.objectContaining({ token: 'token-123', rawKey: 'raw-test-key' }));
     expect(await screen.findByRole('heading', { name: '我的日记' })).toBeInTheDocument();
+  });
+
+  it('shows a browser crypto error before submitting on insecure public origins', async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.spyOn(globalThis, 'fetch');
+    const originalLocation = window.location;
+    const originalSecureContext = window.isSecureContext;
+
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: { ...originalLocation, hostname: 'brevdiary.cloud' }
+    });
+    Object.defineProperty(window, 'isSecureContext', { configurable: true, value: false });
+
+    render(<App />);
+
+    await user.click(screen.getByRole('button', { name: '注册' }));
+    await user.type(screen.getByLabelText('邮箱'), 'me@example.com');
+    await user.type(screen.getByLabelText('密码'), 'secret123');
+    await user.click(screen.getByRole('button', { name: '创建账号' }));
+
+    expect(screen.getByText('当前访问环境不支持浏览器加密，请使用 HTTPS 或 localhost 访问。')).toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    Object.defineProperty(window, 'location', { configurable: true, value: originalLocation });
+    Object.defineProperty(window, 'isSecureContext', { configurable: true, value: originalSecureContext });
   });
 
   it('loads encrypted diary entries from the API after login', async () => {
