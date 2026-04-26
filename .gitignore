@@ -3,6 +3,7 @@ dist/
 .vite/
 coverage/
 *.tsbuildinfo
+.cache/
 
 .superpowers/
 .worktrees
@@ -12,6 +13,11 @@ worktrees/
 
 backend/tmp/
 *.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
 .env
+.env.*
+!.env.example
 .DS_Store

@@ -1,0 +1,16 @@
+.git
+.github
+.superpowers
+.worktrees
+node_modules
+dist
+coverage
+.vite
+*.tsbuildinfo
+backend/tmp
+*.log
+.env
+.env.*
+!.env.example
+Dockerfile
+docker-compose.yml

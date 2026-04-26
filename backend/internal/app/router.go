@@ -75,7 +75,7 @@ func (s *server) register(c *gin.Context) {
 		errorJSON(c, http.StatusConflict, "email_exists")
 		return
 	}
-	c.JSON(http.StatusCreated, gin.H{"data": gin.H{"id": user.ID, "email": user.Email, "kdfSalt": user.KDFSalt}, "error": nil})
+	c.JSON(http.StatusCreated, gin.H{"data": gin.H{"user": gin.H{"id": user.ID, "email": user.Email, "kdfSalt": user.KDFSalt}}, "error": nil})
 }
 
 func (s *server) login(c *gin.Context) {

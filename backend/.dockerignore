@@ -1,0 +1,8 @@
+.git
+.superpowers
+.worktrees
+tmp
+*.log
+.env
+.env.*
+Dockerfile

@@ -71,6 +71,20 @@ func TestRegisterLoginAndCreateEncryptedEntry(t *testing.T) {
 	if res.Code != http.StatusCreated {
 		t.Fatalf("register status = %d body=%s", res.Code, res.Body.String())
 	}
+	var register struct {
+		Data struct {
+			User struct {
+				Email   string `json:"email"`
+				KDFSalt string `json:"kdfSalt"`
+			} `json:"user"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(res.Body.Bytes(), &register); err != nil {
+		t.Fatal(err)
+	}
+	if register.Data.User.Email != "me@example.com" || register.Data.User.KDFSalt == "" {
+		t.Fatalf("register response missing user envelope: %s", res.Body.String())
+	}
 
 	res = postJSON(t, router, "/api/auth/login", "", map[string]string{
 		"email": "me@example.com", "password": "secret123",
