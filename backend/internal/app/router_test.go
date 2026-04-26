@@ -72,7 +72,7 @@ func TestRegisterLoginAndCreateEncryptedEntry(t *testing.T) {
 	router := newTestRouter(t)
 
 	res := postJSON(t, router, "/api/auth/register", "", map[string]string{
-		"email": "me@example.com", "password": "***",
+		"email": "me@example.com", "password": "secret123",
 	})
 	if res.Code != http.StatusCreated {
 		t.Fatalf("register status = %d body=%s", res.Code, res.Body.String())
@@ -94,7 +94,7 @@ func TestRegisterLoginAndCreateEncryptedEntry(t *testing.T) {
 	}
 
 	res = postJSON(t, router, "/api/auth/login", "", map[string]string{
-		"email": "me@example.com", "password": "***",
+		"email": "me@example.com", "password": "secret123",
 	})
 	if res.Code != http.StatusOK {
 		t.Fatalf("login status = %d body=%s", res.Code, res.Body.String())
@@ -129,7 +129,7 @@ func TestRegisterRejectsInvalidEmailFormat(t *testing.T) {
 
 	for _, email := range []string{"", "not-an-email", "name@", "@example.com", "name example@example.com"} {
 		res := postJSON(t, router, "/api/auth/register", "", map[string]string{
-			"email": email, "password": "***",
+			"email": email, "password": "secret123",
 		})
 		if res.Code != http.StatusBadRequest {
 			t.Fatalf("email %q status = %d body=%s", email, res.Code, res.Body.String())
@@ -314,8 +314,8 @@ func TestDeletedEntryCanBeRestoredOrPermanentlyDeleted(t *testing.T) {
 
 func registerAndLogin(t *testing.T, router http.Handler, email string) string {
 	t.Helper()
-	_ = postJSON(t, router, "/api/auth/register", "", map[string]string{"email": email, "password": "***"})
-	res := postJSON(t, router, "/api/auth/login", "", map[string]string{"email": email, "password": "***"})
+	_ = postJSON(t, router, "/api/auth/register", "", map[string]string{"email": email, "password": "secret123"})
+	res := postJSON(t, router, "/api/auth/login", "", map[string]string{"email": email, "password": "secret123"})
 	var login struct {
 		Data struct {
 			Token string `json:"token"`

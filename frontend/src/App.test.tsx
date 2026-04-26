@@ -88,6 +88,65 @@ describe('diary interface', () => {
     expect(await screen.findByRole('heading', { name: '我的日记' })).toBeInTheDocument();
   });
 
+  it('shows a specific message when registration input is invalid', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
+      const path = input.toString();
+      if (path === '/api/auth/register') {
+        return { ok: false, json: async () => ({ data: null, error: { code: 'invalid_credentials' } }) } as Response;
+      }
+      throw new Error(`unexpected fetch ${path}`);
+    });
+
+    render(<App />);
+
+    await user.click(screen.getByRole('button', { name: '注册' }));
+    await user.type(screen.getByLabelText('邮箱'), 'bad-email');
+    await user.type(screen.getByLabelText('密码'), '123');
+    await user.click(screen.getByRole('button', { name: '创建账号' }));
+
+    expect(await screen.findByText('邮箱格式不正确，密码至少需要 6 位')).toBeInTheDocument();
+  });
+
+  it('shows a specific message when the email is already registered', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
+      const path = input.toString();
+      if (path === '/api/auth/register') {
+        return { ok: false, json: async () => ({ data: null, error: { code: 'email_exists' } }) } as Response;
+      }
+      throw new Error(`unexpected fetch ${path}`);
+    });
+
+    render(<App />);
+
+    await user.click(screen.getByRole('button', { name: '注册' }));
+    await user.type(screen.getByLabelText('邮箱'), 'me@example.com');
+    await user.type(screen.getByLabelText('密码'), 'secret123');
+    await user.click(screen.getByRole('button', { name: '创建账号' }));
+
+    expect(await screen.findByText('这个邮箱已经注册')).toBeInTheDocument();
+  });
+
+  it('shows a specific message when login credentials are invalid', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
+      const path = input.toString();
+      if (path === '/api/auth/login') {
+        return { ok: false, json: async () => ({ data: null, error: { code: 'invalid_credentials' } }) } as Response;
+      }
+      throw new Error(`unexpected fetch ${path}`);
+    });
+
+    render(<App />);
+
+    await user.type(screen.getByLabelText('邮箱'), 'me@example.com');
+    await user.type(screen.getByLabelText('密码'), 'wrong-password');
+    await user.click(screen.getByRole('button', { name: '进入日记' }));
+
+    expect(await screen.findByText('邮箱或密码错误')).toBeInTheDocument();
+  });
+
   it('shows a browser crypto error before submitting on insecure public origins', async () => {
     const user = userEvent.setup();
     const fetchMock = vi.spyOn(globalThis, 'fetch');
