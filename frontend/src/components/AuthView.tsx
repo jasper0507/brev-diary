@@ -34,8 +34,8 @@ export function AuthView({ onAuthenticated, onPreview }: AuthViewProps) {
       const session = createStoredSession({ token, email: auth.user.email, kdfSalt: auth.user.kdfSalt, rawKey });
       saveSession(session);
       onAuthenticated(session, key);
-    } catch {
-      setError('账号或密码有误');
+    } catch (error) {
+      setError(authErrorMessage(mode, error));
     } finally {
       setLoading(false);
     }
@@ -80,4 +80,20 @@ function browserCryptoAvailable() {
   const localHostnames = ['localhost', '127.0.0.1', '[::1]'];
   const isLocal = localHostnames.includes(window.location.hostname);
   return (window.isSecureContext || isLocal) && Boolean(globalThis.crypto?.subtle);
+}
+
+function authErrorMessage(mode: 'login' | 'register', error: unknown) {
+  const code = error instanceof Error ? error.message : 'request_failed';
+  if (mode === 'register') {
+    if (code === 'invalid_credentials') {
+      return '邮箱格式不正确，密码至少需要 6 位';
+    }
+    if (code === 'email_exists') {
+      return '这个邮箱已经注册';
+    }
+  }
+  if (mode === 'login' && code === 'invalid_credentials') {
+    return '邮箱或密码错误';
+  }
+  return '服务暂时不可用，请稍后再试';
 }
