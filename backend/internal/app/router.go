@@ -123,7 +123,7 @@ func (s *server) listEntries(c *gin.Context) {
 func (s *server) createEntry(c *gin.Context) {
 	user := currentUser(c)
 	var req entryRequest
-	if err := c.ShouldBindJSON(&req); err != nil || req.EntryDate == "" || req.EncryptedPayload == "" || req.Nonce == "" {
+	if err := c.ShouldBindJSON(&req); err != nil || !validEntryDate(req.EntryDate) || req.EncryptedPayload == "" || req.Nonce == "" {
 		errorJSON(c, http.StatusBadRequest, "invalid_entry")
 		return
 	}
@@ -191,6 +191,10 @@ func (s *server) updateEntry(c *gin.Context) {
 	}
 	if req.Version != 0 && req.Version != entry.Version {
 		errorJSON(c, http.StatusConflict, "version_conflict")
+		return
+	}
+	if req.EntryDate != "" && !validEntryDate(req.EntryDate) {
+		errorJSON(c, http.StatusBadRequest, "invalid_entry")
 		return
 	}
 	entry.EncryptedPayload = req.EncryptedPayload
@@ -291,7 +295,7 @@ func (s *server) authRequired() gin.HandlerFunc {
 		}
 		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (any, error) {
 			return []byte(s.cfg.JWTSecret), nil
-		})
+		}, jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}))
 		if err != nil || !token.Valid {
 			errorJSON(c, http.StatusUnauthorized, "invalid_token")
 			c.Abort()
@@ -309,6 +313,14 @@ func (s *server) authRequired() gin.HandlerFunc {
 		c.Set("user", user)
 		c.Next()
 	}
+}
+
+func validEntryDate(value string) bool {
+	if len(value) != len("2006-01-02") {
+		return false
+	}
+	parsed, err := time.Parse("2006-01-02", value)
+	return err == nil && parsed.Format("2006-01-02") == value
 }
 
 func currentUser(c *gin.Context) models.User {

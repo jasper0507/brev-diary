@@ -17,9 +17,18 @@ export async function deriveDiaryKey(password: string, salt: string): Promise<Cr
     },
     baseKey,
     { name: 'AES-GCM', length: 256 },
-    false,
+    true,
     ['encrypt', 'decrypt']
   );
+}
+
+export async function exportDiaryKey(key: CryptoKey): Promise<string> {
+  const raw = await crypto.subtle.exportKey('raw', key);
+  return bytesToBase64(new Uint8Array(raw));
+}
+
+export async function importDiaryKey(rawKey: string): Promise<CryptoKey> {
+  return crypto.subtle.importKey('raw', toArrayBuffer(base64ToBytes(rawKey)), { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
 }
 
 export async function encryptJSON(key: CryptoKey, value: unknown): Promise<EncryptedPayload> {

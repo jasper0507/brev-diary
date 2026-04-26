@@ -12,6 +12,9 @@ import (
 
 func main() {
 	cfg := config.Load()
+	if err := cfg.Validate(); err != nil {
+		log.Fatal(err)
+	}
 	db, err := gorm.Open(mysql.Open(cfg.DatabaseDSN), &gorm.Config{})
 	if err != nil {
 		log.Fatal(err)

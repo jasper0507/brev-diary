@@ -2,14 +2,14 @@ services:
   mysql:
     image: mysql:8.4
     environment:
-      MYSQL_ROOT_PASSWORD: password
-      MYSQL_DATABASE: diary
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-diary-local-password}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-diary}
     ports:
       - "3306:3306"
     volumes:
       - mysql-data:/var/lib/mysql
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-ppassword"]
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -p$${MYSQL_ROOT_PASSWORD}"]
       interval: 5s
       timeout: 3s
       retries: 20
@@ -18,8 +18,8 @@ services:
     image: minio/minio:RELEASE.2025-09-07T16-13-09Z
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin-dev-only}
     ports:
       - "9000:9000"
       - "9001:9001"
@@ -30,14 +30,15 @@ services:
     build:
       context: ./backend
     environment:
-      API_ADDR: ":8080"
-      DATABASE_DSN: "root:password@tcp(mysql:3306)/diary?charset=utf8mb4&parseTime=True&loc=Local"
-      JWT_SECRET: "dev-secret-change-me"
-      TOKEN_TTL_DAYS: "7"
+      APP_ENV: ${APP_ENV:-development}
+      API_ADDR: ${API_ADDR:-:8080}
+      DATABASE_DSN: ${DATABASE_DSN:-root:diary-local-password@tcp(mysql:3306)/diary?charset=utf8mb4&parseTime=True&loc=Local}
+      JWT_SECRET: ${JWT_SECRET:-dev-only-change-me-before-production}
+      TOKEN_TTL_DAYS: ${TOKEN_TTL_DAYS:-7}
       MINIO_ENDPOINT: "minio:9000"
-      MINIO_ACCESS_KEY: "minioadmin"
-      MINIO_SECRET_KEY: "minioadmin"
-      MINIO_BUCKET: "diary-attachments"
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin-dev-only}
+      MINIO_BUCKET: ${MINIO_BUCKET:-diary-attachments}
     depends_on:
       mysql:
         condition: service_healthy
@@ -50,7 +51,7 @@ services:
     build:
       context: ./frontend
     environment:
-      VITE_API_BASE: ""
+      VITE_API_BASE: ${VITE_API_BASE:-}
     depends_on:
       - backend
     ports:

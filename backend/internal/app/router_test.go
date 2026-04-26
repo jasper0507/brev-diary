@@ -12,6 +12,7 @@ import (
 	"diaryapp/backend/internal/config"
 	"diaryapp/backend/internal/models"
 	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt/v5"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
@@ -141,6 +142,48 @@ func TestUserCanOnlyHaveOneActiveEntryPerDate(t *testing.T) {
 	second := postJSON(t, router, "/api/entries", token, body)
 	if second.Code != http.StatusConflict {
 		t.Fatalf("duplicate create status = %d body=%s", second.Code, second.Body.String())
+	}
+}
+
+func TestEntryDateMustBeISODate(t *testing.T) {
+	router := newTestRouter(t)
+	token := registerAndLogin(t, router, "date@example.com")
+
+	for _, entryDate := range []string{"2026-4-26", "2026-02-30", "not-a-date", ""} {
+		res := postJSON(t, router, "/api/entries", token, map[string]any{
+			"entryDate": entryDate, "encryptedPayload": "ciphertext", "nonce": "nonce",
+		})
+		if res.Code != http.StatusBadRequest {
+			t.Fatalf("entryDate %q status = %d body=%s", entryDate, res.Code, res.Body.String())
+		}
+	}
+
+	created := postJSON(t, router, "/api/entries", token, map[string]any{
+		"entryDate": "2026-04-26", "encryptedPayload": "ciphertext", "nonce": "nonce",
+	})
+	var body struct {
+		Data models.Entry `json:"data"`
+	}
+	_ = json.Unmarshal(created.Body.Bytes(), &body)
+	updated := requestJSON(t, router, http.MethodPut, "/api/entries/"+strconv.Itoa(int(body.Data.ID)), token, map[string]any{
+		"entryDate": "2026-13-01", "encryptedPayload": "ciphertext", "nonce": "nonce", "version": body.Data.Version,
+	})
+	if updated.Code != http.StatusBadRequest {
+		t.Fatalf("invalid update date status = %d body=%s", updated.Code, updated.Body.String())
+	}
+}
+
+func TestRejectsUnexpectedJWTSigningMethod(t *testing.T) {
+	router := newTestRouter(t)
+	token := jwt.NewWithClaims(jwt.SigningMethodHS512, jwt.MapClaims{"sub": "1", "exp": time.Now().Add(time.Hour).Unix()})
+	signed, err := token.SignedString([]byte("test-secret"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	res := requestJSON(t, router, http.MethodGet, "/api/me", signed, nil)
+	if res.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d body=%s", res.Code, res.Body.String())
 	}
 }
 
