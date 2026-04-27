@@ -25,7 +25,6 @@ function storedSession(expiresAt = Date.now() + 100000) {
   return {
     token: 'token-123',
     email: 'me@example.com',
-    kdfSalt: 'salt',
     rawKey: 'raw-test-key',
     expiresAt
   };
@@ -68,7 +67,7 @@ describe('diary interface', () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
       const path = input.toString();
       if (path === '/api/auth/register') {
-        return { ok: true, json: async () => ({ data: { token: 'token-123', user: { email: 'me@example.com', kdfSalt: 'salt' } }, error: null }) } as Response;
+        return { ok: true, json: async () => ({ data: { token: 'token-123', user: { email: 'me@example.com', diaryKey: 'raw-test-key' } }, error: null }) } as Response;
       }
       if (path === '/api/entries') {
         return { ok: true, json: async () => ({ data: [], error: null }) } as Response;
@@ -80,12 +79,29 @@ describe('diary interface', () => {
     await user.click(screen.getByRole('button', { name: '注册' }));
     await user.type(screen.getByLabelText('邮箱'), 'me@example.com');
     await user.type(screen.getByLabelText('密码'), 'secret123');
+    await user.type(screen.getByLabelText('确认密码'), 'secret123');
     await user.click(screen.getByRole('button', { name: '创建账号' }));
 
     expect(fetchMock).toHaveBeenCalledWith('/api/auth/register', expect.objectContaining({ method: 'POST' }));
     expect(fetchMock).not.toHaveBeenCalledWith('/api/auth/login', expect.anything());
     expect(JSON.parse(localStorage.getItem('diary.session') ?? '{}')).toEqual(expect.objectContaining({ token: 'token-123', rawKey: 'raw-test-key' }));
     expect(await screen.findByRole('heading', { name: '我的日记' })).toBeInTheDocument();
+  });
+
+  it('blocks registration when the confirmation password does not match', async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.spyOn(globalThis, 'fetch');
+
+    render(<App />);
+
+    await user.click(screen.getByRole('button', { name: '注册' }));
+    await user.type(screen.getByLabelText('邮箱'), 'me@example.com');
+    await user.type(screen.getByLabelText('密码'), 'secret123');
+    await user.type(screen.getByLabelText('确认密码'), 'secret456');
+    await user.click(screen.getByRole('button', { name: '创建账号' }));
+
+    expect(screen.getByText('两次输入的密码不一致')).toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('shows a specific message when registration input is invalid', async () => {
@@ -103,6 +119,7 @@ describe('diary interface', () => {
     await user.click(screen.getByRole('button', { name: '注册' }));
     await user.type(screen.getByLabelText('邮箱'), 'bad-email');
     await user.type(screen.getByLabelText('密码'), '123');
+    await user.type(screen.getByLabelText('确认密码'), '123');
     await user.click(screen.getByRole('button', { name: '创建账号' }));
 
     expect(await screen.findByText('邮箱格式不正确，密码至少需要 6 位')).toBeInTheDocument();
@@ -123,6 +140,7 @@ describe('diary interface', () => {
     await user.click(screen.getByRole('button', { name: '注册' }));
     await user.type(screen.getByLabelText('邮箱'), 'me@example.com');
     await user.type(screen.getByLabelText('密码'), 'secret123');
+    await user.type(screen.getByLabelText('确认密码'), 'secret123');
     await user.click(screen.getByRole('button', { name: '创建账号' }));
 
     expect(await screen.findByText('这个邮箱已经注册')).toBeInTheDocument();
@@ -147,30 +165,27 @@ describe('diary interface', () => {
     expect(await screen.findByText('邮箱或密码错误')).toBeInTheDocument();
   });
 
-  it('shows a browser crypto error before submitting on insecure public origins', async () => {
+  it('resets the password from the forgot-password form and returns to login', async () => {
     const user = userEvent.setup();
-    const fetchMock = vi.spyOn(globalThis, 'fetch');
-    const originalLocation = window.location;
-    const originalSecureContext = window.isSecureContext;
-
-    Object.defineProperty(window, 'location', {
-      configurable: true,
-      value: { ...originalLocation, hostname: 'brevdiary.cloud' }
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
+      const path = input.toString();
+      if (path === '/api/auth/forgot-password') {
+        return { ok: true, json: async () => ({ data: { email: 'me@example.com', diaryKey: 'raw-test-key' }, error: null }) } as Response;
+      }
+      throw new Error(`unexpected fetch ${path}`);
     });
-    Object.defineProperty(window, 'isSecureContext', { configurable: true, value: false });
 
     render(<App />);
 
-    await user.click(screen.getByRole('button', { name: '注册' }));
+    await user.click(screen.getByRole('button', { name: '忘记密码' }));
     await user.type(screen.getByLabelText('邮箱'), 'me@example.com');
-    await user.type(screen.getByLabelText('密码'), 'secret123');
-    await user.click(screen.getByRole('button', { name: '创建账号' }));
+    await user.type(screen.getByLabelText('新密码'), 'new-secret');
+    await user.type(screen.getByLabelText('确认新密码'), 'new-secret');
+    await user.click(screen.getByRole('button', { name: '重置密码' }));
 
-    expect(screen.getByText('当前访问环境不支持浏览器加密，请使用 HTTPS 或 localhost 访问。')).toBeInTheDocument();
-    expect(fetchMock).not.toHaveBeenCalled();
-
-    Object.defineProperty(window, 'location', { configurable: true, value: originalLocation });
-    Object.defineProperty(window, 'isSecureContext', { configurable: true, value: originalSecureContext });
+    expect(fetchMock).toHaveBeenCalledWith('/api/auth/forgot-password', expect.objectContaining({ method: 'POST' }));
+    expect(await screen.findByText('密码已重置，请重新登录')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '进入日记' })).toBeInTheDocument();
   });
 
   it('loads encrypted diary entries from the API after login', async () => {
@@ -178,7 +193,7 @@ describe('diary interface', () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
       const path = input.toString();
       if (path === '/api/auth/login') {
-        return { ok: true, json: async () => ({ data: { token: 'token-123', user: { email: 'me@example.com', kdfSalt: 'salt' } }, error: null }) } as Response;
+        return { ok: true, json: async () => ({ data: { token: 'token-123', user: { email: 'me@example.com', diaryKey: 'raw-test-key' } }, error: null }) } as Response;
       }
       if (path === '/api/entries') {
         return {
@@ -210,7 +225,7 @@ describe('diary interface', () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = input.toString();
       if (path === '/api/auth/login') {
-        return { ok: true, json: async () => ({ data: { token: 'token-123', user: { email: 'me@example.com', kdfSalt: 'salt' } }, error: null }) } as Response;
+        return { ok: true, json: async () => ({ data: { token: 'token-123', user: { email: 'me@example.com', diaryKey: 'raw-test-key' } }, error: null }) } as Response;
       }
       if (path === '/api/entries' && !init?.method) {
         return { ok: true, json: async () => ({ data: [], error: null }) } as Response;
@@ -255,7 +270,7 @@ describe('diary interface', () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = input.toString();
       if (path === '/api/auth/login') {
-        return { ok: true, json: async () => ({ data: { token: 'token-123', user: { email: 'me@example.com', kdfSalt: 'salt' } }, error: null }) } as Response;
+        return { ok: true, json: async () => ({ data: { token: 'token-123', user: { email: 'me@example.com', diaryKey: 'raw-test-key' } }, error: null }) } as Response;
       }
       if (path === '/api/entries' && !init?.method) {
         return { ok: true, json: async () => ({ data: [{ id: 42, entryDate: '2026-04-26', encryptedPayload: JSON.stringify({ mood: '感恩', favorite: false, text: '旧内容', images: [] }), nonce: 'test-nonce', version: 3 }], error: null }) } as Response;
@@ -285,7 +300,7 @@ describe('diary interface', () => {
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = input.toString();
       if (path === '/api/auth/login') {
-        return { ok: true, json: async () => ({ data: { token: 'token-123', user: { email: 'me@example.com', kdfSalt: 'salt' } }, error: null }) } as Response;
+        return { ok: true, json: async () => ({ data: { token: 'token-123', user: { email: 'me@example.com', diaryKey: 'raw-test-key' } }, error: null }) } as Response;
       }
       if (path === '/api/entries' && !init?.method) {
         return { ok: true, json: async () => ({ data: [{ id: 42, entryDate: '2026-04-26', encryptedPayload: JSON.stringify({ mood: '感恩', favorite: false, text: '旧内容', images: [] }), nonce: 'test-nonce', version: 3 }], error: null }) } as Response;
@@ -362,7 +377,7 @@ describe('diary interface', () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = input.toString();
       if (path === '/api/auth/login') {
-        return { ok: true, json: async () => ({ data: { token: 'token-123', user: { email: 'me@example.com', kdfSalt: 'salt' } }, error: null }) } as Response;
+        return { ok: true, json: async () => ({ data: { token: 'token-123', user: { email: 'me@example.com', diaryKey: 'raw-test-key' } }, error: null }) } as Response;
       }
       if (path === '/api/entries' && !init?.method) {
         return { ok: true, json: async () => ({ data: [{ id: 42, entryDate: '2026-04-26', encryptedPayload: JSON.stringify({ mood: '感恩', favorite: false, text: '可删除日记', images: [] }), nonce: 'test-nonce', version: 1 }], error: null }) } as Response;
@@ -396,7 +411,7 @@ describe('diary interface', () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = input.toString();
       if (path === '/api/auth/login') {
-        return { ok: true, json: async () => ({ data: { token: 'token-123', user: { email: 'me@example.com', kdfSalt: 'salt' } }, error: null }) } as Response;
+        return { ok: true, json: async () => ({ data: { token: 'token-123', user: { email: 'me@example.com', diaryKey: 'raw-test-key' } }, error: null }) } as Response;
       }
       if (path === '/api/entries' && !init?.method) {
         return { ok: true, json: async () => ({ data: [], error: null }) } as Response;
@@ -440,7 +455,7 @@ describe('diary interface', () => {
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
       const path = input.toString();
       if (path === '/api/auth/login') {
-        return { ok: true, json: async () => ({ data: { token: 'token-123', user: { email: 'me@example.com', kdfSalt: 'salt' } }, error: null }) } as Response;
+        return { ok: true, json: async () => ({ data: { token: 'token-123', user: { email: 'me@example.com', diaryKey: 'raw-test-key' } }, error: null }) } as Response;
       }
       if (path === '/api/entries') {
         return { ok: false, json: async () => ({ data: null, error: { code: 'server_error' } }) } as Response;

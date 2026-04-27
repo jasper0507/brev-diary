@@ -5,7 +5,6 @@ export const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 export type StoredSession = {
   token: string;
   email: string;
-  kdfSalt: string;
   rawKey: string;
   expiresAt: number;
 };
@@ -17,7 +16,6 @@ export function createStoredSession(input: Omit<StoredSession, 'expiresAt'>, now
 export function saveSession(session: StoredSession) {
   localStorage.setItem(SESSION_KEY, JSON.stringify(session));
   localStorage.setItem('diary.token', session.token);
-  localStorage.setItem('diary.kdfSalt', session.kdfSalt);
 }
 
 export function loadSession(now = Date.now()): StoredSession | null {
@@ -26,12 +24,11 @@ export function loadSession(now = Date.now()): StoredSession | null {
 
   try {
     const session = JSON.parse(raw) as StoredSession;
-    if (!session.token || !session.email || !session.kdfSalt || !session.rawKey || session.expiresAt <= now) {
+    if (!session.token || !session.email || !session.rawKey || session.expiresAt <= now) {
       clearSession();
       return null;
     }
     localStorage.setItem('diary.token', session.token);
-    localStorage.setItem('diary.kdfSalt', session.kdfSalt);
     return session;
   } catch {
     clearSession();
@@ -42,5 +39,4 @@ export function loadSession(now = Date.now()): StoredSession | null {
 export function clearSession() {
   localStorage.removeItem(SESSION_KEY);
   localStorage.removeItem('diary.token');
-  localStorage.removeItem('diary.kdfSalt');
 }
