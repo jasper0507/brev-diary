@@ -28,6 +28,7 @@ func NewRouter(db *gorm.DB, cfg config.Config) *gin.Engine {
 	api := r.Group("/api")
 	api.POST("/auth/register", s.register)
 	api.POST("/auth/login", s.login)
+	api.POST("/auth/forgot-password", s.forgotPassword)
 
 	auth := api.Group("")
 	auth.Use(s.authRequired())
@@ -66,12 +67,12 @@ func (s *server) register(c *gin.Context) {
 		errorJSON(c, http.StatusInternalServerError, "hash_failed")
 		return
 	}
-	salt, err := crypto.RandomSalt()
+	diaryKey, err := crypto.RandomDiaryKey()
 	if err != nil {
-		errorJSON(c, http.StatusInternalServerError, "salt_failed")
+		errorJSON(c, http.StatusInternalServerError, "diary_key_failed")
 		return
 	}
-	user := models.User{Email: email, PasswordHash: string(hash), KDFSalt: salt}
+	user := models.User{Email: email, PasswordHash: string(hash), DiaryKey: diaryKey}
 	if err := s.db.Create(&user).Error; err != nil {
 		errorJSON(c, http.StatusConflict, "email_exists")
 		return
@@ -81,7 +82,7 @@ func (s *server) register(c *gin.Context) {
 		errorJSON(c, http.StatusInternalServerError, "token_failed")
 		return
 	}
-	c.JSON(http.StatusCreated, gin.H{"data": gin.H{"token": token, "user": gin.H{"id": user.ID, "email": user.Email, "kdfSalt": user.KDFSalt}}, "error": nil})
+	c.JSON(http.StatusCreated, gin.H{"data": gin.H{"token": token, "user": gin.H{"id": user.ID, "email": user.Email, "diaryKey": user.DiaryKey}}, "error": nil})
 }
 
 func (s *server) login(c *gin.Context) {
@@ -104,12 +105,41 @@ func (s *server) login(c *gin.Context) {
 		errorJSON(c, http.StatusInternalServerError, "token_failed")
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"data": gin.H{"token": token, "user": gin.H{"id": user.ID, "email": user.Email, "kdfSalt": user.KDFSalt}}, "error": nil})
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"token": token, "user": gin.H{"id": user.ID, "email": user.Email, "diaryKey": user.DiaryKey}}, "error": nil})
+}
+
+func (s *server) forgotPassword(c *gin.Context) {
+	var req authRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		errorJSON(c, http.StatusBadRequest, "invalid_json")
+		return
+	}
+	email := strings.TrimSpace(strings.ToLower(req.Email))
+	if !validEmail(email) || len(req.Password) < 6 {
+		errorJSON(c, http.StatusBadRequest, "invalid_credentials")
+		return
+	}
+	var user models.User
+	if err := s.db.Where("email = ?", email).First(&user).Error; err != nil {
+		errorJSON(c, http.StatusNotFound, "email_not_found")
+		return
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	if err != nil {
+		errorJSON(c, http.StatusInternalServerError, "hash_failed")
+		return
+	}
+	user.PasswordHash = string(hash)
+	if err := s.db.Save(&user).Error; err != nil {
+		errorJSON(c, http.StatusInternalServerError, "update_failed")
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"id": user.ID, "email": user.Email, "diaryKey": user.DiaryKey}, "error": nil})
 }
 
 func (s *server) me(c *gin.Context) {
 	user := currentUser(c)
-	c.JSON(http.StatusOK, gin.H{"data": gin.H{"id": user.ID, "email": user.Email, "kdfSalt": user.KDFSalt}, "error": nil})
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"id": user.ID, "email": user.Email, "diaryKey": user.DiaryKey}, "error": nil})
 }
 
 type entryRequest struct {

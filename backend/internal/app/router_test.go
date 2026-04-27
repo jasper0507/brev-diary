@@ -81,15 +81,15 @@ func TestRegisterLoginAndCreateEncryptedEntry(t *testing.T) {
 		Data struct {
 			Token string `json:"token"`
 			User  struct {
-				Email   string `json:"email"`
-				KDFSalt string `json:"kdfSalt"`
+				Email    string `json:"email"`
+				DiaryKey string `json:"diaryKey"`
 			} `json:"user"`
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(res.Body.Bytes(), &register); err != nil {
 		t.Fatal(err)
 	}
-	if register.Data.Token == "" || register.Data.User.Email != "me@example.com" || register.Data.User.KDFSalt == "" {
+	if register.Data.Token == "" || register.Data.User.Email != "me@example.com" || register.Data.User.DiaryKey == "" {
 		t.Fatalf("register response missing user envelope: %s", res.Body.String())
 	}
 
@@ -110,6 +110,9 @@ func TestRegisterLoginAndCreateEncryptedEntry(t *testing.T) {
 	if login.Data.Token == "" {
 		t.Fatal("expected token")
 	}
+	if !bytes.Contains(res.Body.Bytes(), []byte(register.Data.User.DiaryKey)) {
+		t.Fatalf("login response missing stored diary key: %s", res.Body.String())
+	}
 
 	res = postJSON(t, router, "/api/entries", login.Data.Token, map[string]any{
 		"entryDate":        "2026-04-25",
@@ -121,6 +124,62 @@ func TestRegisterLoginAndCreateEncryptedEntry(t *testing.T) {
 	}
 	if bytes.Contains(res.Body.Bytes(), []byte("secret123")) {
 		t.Fatal("response leaked password")
+	}
+}
+
+func TestForgotPasswordResetsLoginPasswordAndKeepsDiaryKey(t *testing.T) {
+	router := newTestRouter(t)
+
+	registered := postJSON(t, router, "/api/auth/register", "", map[string]string{
+		"email": "reset@example.com", "password": "old-pass",
+	})
+	if registered.Code != http.StatusCreated {
+		t.Fatalf("register status = %d body=%s", registered.Code, registered.Body.String())
+	}
+	var registerBody struct {
+		Data struct {
+			User struct {
+				DiaryKey string `json:"diaryKey"`
+			} `json:"user"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(registered.Body.Bytes(), &registerBody); err != nil {
+		t.Fatal(err)
+	}
+
+	reset := postJSON(t, router, "/api/auth/forgot-password", "", map[string]string{
+		"email": "reset@example.com", "password": "new-pass",
+	})
+	if reset.Code != http.StatusOK {
+		t.Fatalf("reset status = %d body=%s", reset.Code, reset.Body.String())
+	}
+
+	oldLogin := postJSON(t, router, "/api/auth/login", "", map[string]string{
+		"email": "reset@example.com", "password": "old-pass",
+	})
+	if oldLogin.Code != http.StatusUnauthorized {
+		t.Fatalf("old password login status = %d body=%s", oldLogin.Code, oldLogin.Body.String())
+	}
+
+	newLogin := postJSON(t, router, "/api/auth/login", "", map[string]string{
+		"email": "reset@example.com", "password": "new-pass",
+	})
+	if newLogin.Code != http.StatusOK {
+		t.Fatalf("new password login status = %d body=%s", newLogin.Code, newLogin.Body.String())
+	}
+	if !bytes.Contains(newLogin.Body.Bytes(), []byte(registerBody.Data.User.DiaryKey)) {
+		t.Fatalf("reset changed stored diary key: %s", newLogin.Body.String())
+	}
+}
+
+func TestForgotPasswordRejectsUnknownEmail(t *testing.T) {
+	router := newTestRouter(t)
+
+	res := postJSON(t, router, "/api/auth/forgot-password", "", map[string]string{
+		"email": "missing@example.com", "password": "new-pass",
+	})
+	if res.Code != http.StatusNotFound {
+		t.Fatalf("status = %d body=%s", res.Code, res.Body.String())
 	}
 }
 
