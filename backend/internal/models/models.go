@@ -6,7 +6,7 @@ type User struct {
 	ID           uint      `gorm:"primaryKey" json:"id"`
 	Email        string    `gorm:"uniqueIndex;size:255;not null" json:"email"`
 	PasswordHash string    `gorm:"size:255;not null" json:"-"`
-	KDFSalt      string    `gorm:"size:64;not null" json:"kdfSalt"`
+	DiaryKey     string    `gorm:"size:128;not null" json:"diaryKey"`
 	CreatedAt    time.Time `json:"createdAt"`
 	UpdatedAt    time.Time `json:"updatedAt"`
 }

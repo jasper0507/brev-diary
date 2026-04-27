@@ -3,7 +3,7 @@ export type ApiEnvelope<T> = { data: T; error: null } | { data: null; error: { c
 export type ApiUser = {
   id?: number;
   email: string;
-  kdfSalt: string;
+  diaryKey: string;
 };
 
 export type AuthResponse = {
