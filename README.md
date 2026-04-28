@@ -117,6 +117,29 @@ CI 会在 push 和 pull request 时运行以上质量门禁。
 - 触发删除确认并取消
 - Docker 后端可用时验证注册、登录、忘记密码、写日记、刷新恢复、删除、回收站恢复
 
+## 公网自动部署
+
+当前公网实例使用一个独立的 `main` worktree 作为部署目录：`/opt/brev-diary-main`。
+
+自动部署脚本：
+
+```bash
+bash scripts/auto-deploy-main.sh
+```
+
+脚本会完成这些动作：
+- 从 `origin/main` 拉取最新提交
+- 将部署 worktree 重置到最新 `main`
+- 复用 `/opt/brev-diary/.env` 作为生产环境配置
+- 执行 `docker compose up --build -d --remove-orphans`
+- 通过前端首页 `200` 和 `/api/me` 的 `200/401` 做验活
+
+首次部署或强制重建可以这样执行：
+
+```bash
+FORCE_DEPLOY=1 bash scripts/auto-deploy-main.sh
+```
+
 ## Release Checklist
 
 - `go test ./...` 通过
