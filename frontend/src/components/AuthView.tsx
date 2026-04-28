@@ -81,6 +81,7 @@ export function AuthView({ onAuthenticated, onPreview }: AuthViewProps) {
       <section className="auth-panel" aria-label="登录注册">
         <p className="auth-kicker">PRIVATE DIARY</p>
         <h1>进入我的日记</h1>
+        <p className="auth-subtitle">{authSubtitle(mode)}</p>
         <div className="auth-tabs" aria-label="认证方式">
           <button className={mode === 'login' ? 'active' : ''} type="button" onClick={() => switchMode('login')}>
             登录
@@ -92,38 +93,50 @@ export function AuthView({ onAuthenticated, onPreview }: AuthViewProps) {
         <form onSubmit={submit} className="auth-form">
           <label>
             邮箱
-            <input value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" />
+            <input value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" placeholder="you@example.com" />
           </label>
           <label>
             {mode === 'forgot' ? '新密码' : '密码'}
-            <input value={password} onChange={(event) => setPassword(event.target.value)} type="password" autoComplete={mode === 'login' ? 'current-password' : 'new-password'} />
+            <input value={password} onChange={(event) => setPassword(event.target.value)} type="password" autoComplete={mode === 'login' ? 'current-password' : 'new-password'} placeholder={mode === 'forgot' ? '至少 6 位新密码' : '输入你的密码'} />
           </label>
           {(mode === 'register' || mode === 'forgot') && (
             <label>
               {mode === 'forgot' ? '确认新密码' : '确认密码'}
-              <input value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} type="password" autoComplete="new-password" />
+              <input value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} type="password" autoComplete="new-password" placeholder="再输入一次确认" />
             </label>
           )}
           {message && <p className={messageTone === 'success' ? 'auth-success' : 'auth-error'}>{message}</p>}
           <button className="auth-submit" type="submit" disabled={loading}>
-            {submitLabel(mode)}
+            {loading ? submitLoadingLabel(mode) : submitLabel(mode)}
           </button>
         </form>
-        {mode === 'login' ? (
-          <button type="button" onClick={() => switchMode('forgot')}>
-            忘记密码
+        <div className="auth-secondary-actions">
+          {mode === 'login' ? (
+            <button className="auth-text-button" type="button" onClick={() => switchMode('forgot')}>
+              忘记密码
+            </button>
+          ) : (
+            <button className="auth-text-button" type="button" onClick={() => switchMode('login')}>
+              返回登录
+            </button>
+          )}
+          <button className="preview-button" type="button" onClick={onPreview}>
+            先看看本地预览
           </button>
-        ) : (
-          <button type="button" onClick={() => switchMode('login')}>
-            返回登录
-          </button>
-        )}
-        <button className="preview-button" type="button" onClick={onPreview}>
-          本地预览
-        </button>
+        </div>
       </section>
     </main>
   );
+}
+
+function authSubtitle(mode: AuthMode) {
+  if (mode === 'register') {
+    return '用邮箱创建账号，之后就能直接进入你的私密时间线。';
+  }
+  if (mode === 'forgot') {
+    return '输入注册邮箱和新密码，重置后立刻回到登录页。';
+  }
+  return '登录后继续写今天的想法，也可以先进入本地预览看看界面。';
 }
 
 function submitLabel(mode: AuthMode) {
@@ -134,6 +147,16 @@ function submitLabel(mode: AuthMode) {
     return '重置密码';
   }
   return '进入日记';
+}
+
+function submitLoadingLabel(mode: AuthMode) {
+  if (mode === 'register') {
+    return '创建中...';
+  }
+  if (mode === 'forgot') {
+    return '重置中...';
+  }
+  return '登录中...';
 }
 
 function authErrorMessage(mode: AuthMode, error: unknown) {
