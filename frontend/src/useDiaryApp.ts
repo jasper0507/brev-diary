@@ -90,6 +90,25 @@ export function useDiaryApp(initialPreview = false) {
     setNotice('');
   }
 
+  function handleAuthFailure(error: unknown) {
+    if (isAuthError(error)) {
+      logout();
+      return true;
+    }
+    return false;
+  }
+
+  async function flushPendingDraft() {
+    const target = activeEntry;
+    if (!target?.mood) {
+      return;
+    }
+    if (draftText === target.text && saveState !== '保存中') {
+      return;
+    }
+    await persistDraft(target, draftText);
+  }
+
   async function loadRealEntries(key: CryptoKey | unknown) {
     setLoadState('loading');
     try {
@@ -98,8 +117,7 @@ export function useDiaryApp(initialPreview = false) {
       setEntries(decoded);
       setLoadState('idle');
     } catch (error) {
-      if (error instanceof Error && ['missing_token', 'invalid_token', 'invalid_user'].includes(error.message)) {
-        logout();
+      if (handleAuthFailure(error)) {
         return;
       }
       setLoadState('failed');
@@ -130,8 +148,9 @@ export function useDiaryApp(initialPreview = false) {
     setSaveAfterMood(false);
   }
 
-  function closeEditor() {
+  async function closeEditor() {
     clearAutoSave();
+    await flushPendingDraft();
     setActiveEntry(null);
     setShowMoodDialog(false);
     setSaveAfterMood(false);
@@ -278,12 +297,13 @@ export function useDiaryApp(initialPreview = false) {
     }
   }
 
-  function openTimelineEntry(entry: Entry) {
+  async function openTimelineEntry(entry: Entry) {
     clearLongPress();
     if (suppressTimelineClick.current) {
       suppressTimelineClick.current = false;
       return;
     }
+    await flushPendingDraft();
     openEntry(entry);
   }
 
@@ -297,7 +317,10 @@ export function useDiaryApp(initialPreview = false) {
       const decoded = await Promise.all(apiEntries.map((entry) => apiEntryToEntry(sessionState.key, entry)));
       setTrashEntries(decoded);
       setTrashState('idle');
-    } catch {
+    } catch (error) {
+      if (handleAuthFailure(error)) {
+        return;
+      }
       setTrashState('failed');
       showNotice('回收站加载失败');
     }
@@ -311,7 +334,10 @@ export function useDiaryApp(initialPreview = false) {
       setTrashEntries((current) => current.filter((item) => item.id !== entry.id));
       setEntries((current) => upsertEntry(current, decoded));
       showNotice('日记已恢复');
-    } catch {
+    } catch (error) {
+      if (handleAuthFailure(error)) {
+        return;
+      }
       showNotice('恢复失败，请稍后重试');
     }
   }
@@ -331,7 +357,10 @@ export function useDiaryApp(initialPreview = false) {
           await permanentlyDeleteEntry(entry.apiId);
           setTrashEntries((current) => current.filter((item) => item.id !== entry.id));
           showNotice('日记已永久删除');
-        } catch {
+        } catch (error) {
+          if (handleAuthFailure(error)) {
+            return;
+          }
           showNotice('永久删除失败，请稍后重试');
         }
       }
@@ -423,6 +452,10 @@ export function useDiaryApp(initialPreview = false) {
 function upsertEntry(current: Entry[], saved: Entry) {
   const exists = current.some((entry) => entry.id === saved.id);
   return exists ? current.map((entry) => (entry.id === saved.id ? saved : entry)) : [saved, ...current];
+}
+
+function isAuthError(error: unknown) {
+  return error instanceof Error && ['missing_token', 'invalid_token', 'invalid_user'].includes(error.message);
 }
 
 export function formatDate(date: string) {

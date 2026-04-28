@@ -4,6 +4,8 @@ import { formatDate } from '../useDiaryApp';
 import type { Entry } from '../diaryData';
 import type { StoredSession } from '../session';
 
+const previewLength = 28;
+
 type TimelineViewProps = {
   mode: AppMode;
   session?: StoredSession;
@@ -57,8 +59,8 @@ export function TimelineView({
           </button>
           {showSettings && (
             <div className="settings-menu">
-              {session && <p>{session.email}</p>}
-              {mode === 'preview' && <p>本地预览模式</p>}
+              {session && <p className="settings-email">{session.email}</p>}
+              {mode === 'preview' && <p className="settings-mode-tag">本地预览模式</p>}
               {mode === 'preview' && (
                 <button type="button" onClick={onLogout}>
                   返回登录
@@ -83,7 +85,7 @@ export function TimelineView({
         <div className="timeline-line" />
         {loadState === 'loading' && <div className="status-message">加载中</div>}
         {loadState === 'failed' && <div className="status-message">加载失败，请稍后重试</div>}
-        {loadState === 'idle' && visibleEntries.length > 0 && <p className="timeline-hint">长按日期可删除</p>}
+        {loadState === 'idle' && visibleEntries.length > 0 && <p className="timeline-hint">长按日期可删除，点开后继续写正文</p>}
         {loadState === 'idle' && visibleEntries.length === 0 ? (
           <div className="empty-timeline">{filter === 'favorite' ? '还没有收藏的日记，先去点亮一颗星吧' : '还没有日记，点右下角开始写第一篇'}</div>
         ) : (
@@ -104,14 +106,19 @@ export function TimelineView({
               onPointerCancel={onLongPressEnd}
             >
               <span className="timeline-dot" />
-              <span className="date-group">
-                <span className="date-text">{formatDate(entry.date)}</span>
-                <span className="weekday-text">{entry.weekday}</span>
+              <span className="timeline-side timeline-side-date">
+                <span className="date-group">
+                  <span className="date-text">{formatDate(entry.date)}</span>
+                  <span className="weekday-text">{entry.weekday}</span>
+                </span>
+                <span className="entry-preview">{compactPreview(entry.text)}</span>
               </span>
-              <span className="mood-chip">
-                <span className="mood-dot" />
-                {entry.mood}
-                {entry.favorite && <Star className="inline-star" size={13} fill="currentColor" aria-hidden="true" />}
+              <span className="timeline-side timeline-side-mood">
+                <span className="mood-chip">
+                  <span className="mood-dot" />
+                  {entry.mood}
+                  {entry.favorite && <Star className="inline-star" size={13} fill="currentColor" aria-hidden="true" />}
+                </span>
               </span>
             </button>
           ))
@@ -123,4 +130,15 @@ export function TimelineView({
       </button>
     </main>
   );
+}
+
+function compactPreview(text: string) {
+  const trimmed = text.replace(/\s+/g, ' ').trim();
+  if (!trimmed) {
+    return '这一天还没留下正文，点开继续写。';
+  }
+  if (trimmed.length <= previewLength) {
+    return trimmed;
+  }
+  return `${trimmed.slice(0, previewLength)}...`;
 }
