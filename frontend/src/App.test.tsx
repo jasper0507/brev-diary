@@ -188,6 +188,44 @@ describe('diary interface', () => {
     expect(screen.getByRole('button', { name: '进入日记' })).toBeInTheDocument();
   });
 
+  it('opens the password reset flow from settings with the current email prefilled', async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = input.toString();
+      if (path === '/api/auth/login') {
+        return { ok: true, json: async () => ({ data: { token: 'token-123', user: { email: 'me@example.com', diaryKey: 'raw-test-key' } }, error: null }) } as Response;
+      }
+      if (path === '/api/entries' && !init?.method) {
+        return { ok: true, json: async () => ({ data: [], error: null }) } as Response;
+      }
+      if (path === '/api/auth/forgot-password') {
+        return { ok: true, json: async () => ({ data: { email: 'me@example.com', diaryKey: 'raw-test-key' }, error: null }) } as Response;
+      }
+      throw new Error(`unexpected fetch ${path}`);
+    });
+
+    render(<App />);
+
+    await user.type(screen.getByLabelText('邮箱'), 'me@example.com');
+    await user.type(screen.getByLabelText('密码'), 'secret123');
+    await user.click(screen.getByRole('button', { name: '进入日记' }));
+    await screen.findByRole('heading', { name: '我的日记' });
+
+    await user.click(screen.getByRole('button', { name: '设置' }));
+    await user.click(screen.getByRole('button', { name: '修改密码' }));
+
+    expect(await screen.findByRole('heading', { name: '进入我的日记' })).toBeInTheDocument();
+    expect(screen.getByLabelText('邮箱')).toHaveValue('me@example.com');
+    expect(screen.getByLabelText('新密码')).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText('新密码'), 'new-secret');
+    await user.type(screen.getByLabelText('确认新密码'), 'new-secret');
+    await user.click(screen.getByRole('button', { name: '重置密码' }));
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/auth/forgot-password', expect.objectContaining({ method: 'POST' }));
+    expect(await screen.findByText('密码已重置，请重新登录')).toBeInTheDocument();
+  });
+
   it('loads encrypted diary entries from the API after login', async () => {
     const user = userEvent.setup();
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {

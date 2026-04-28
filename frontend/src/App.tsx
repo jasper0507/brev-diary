@@ -16,7 +16,7 @@ export default function App({ initialPreview = false }: AppProps) {
   if (diary.mode === 'auth') {
     return (
       <>
-        <AuthView onAuthenticated={diary.enterRealDiary} onPreview={diary.enterPreview} />
+        <AuthView initialEmail={diary.authEmail} initialMode={diary.authMode} onAuthenticated={diary.enterRealDiary} onPreview={diary.enterPreview} />
         <Toast message={diary.notice} onDismiss={diary.dismissNotice} />
       </>
     );
@@ -69,6 +69,7 @@ export default function App({ initialPreview = false }: AppProps) {
         showSettings={diary.showSettings}
         onFilterChange={diary.setFilter}
         onToggleSettings={diary.toggleSettings}
+        onChangePassword={diary.changePassword}
         onOpenTrash={diary.openTrash}
         onLogout={diary.logout}
         onOpenToday={diary.openToday}

@@ -30,15 +30,16 @@ The frontend stores a 7-day browser-local session after successful login or regi
 type StoredSession = {
   token: string;
   email: string;
-  kdfSalt: string;
   rawKey: string;
   expiresAt: number;
 };
 ```
 
-`token` authenticates API requests. `rawKey` is a recoverable browser-local AES key material used to decrypt entries after refreshes. `expiresAt` limits the session to 7 days. On app startup, the frontend loads this session only if it exists and has not expired. Expired or invalid sessions are cleared and the user returns to login.
+`token` authenticates API requests. `rawKey` is the browser-local AES key material exported from the `diaryKey` returned by login or registration, so entries can still be decrypted after refreshes. `expiresAt` limits the session to 7 days. On app startup, the frontend loads this session only if it exists and has not expired. Expired or invalid sessions are cleared and the user returns to login.
 
-This design prioritizes user experience: anyone with access to the same browser profile during the 7-day window can open the diary. Logout clears `token`, `kdfSalt`, `rawKey`, and expiry data immediately.
+This design prioritizes user experience: anyone with access to the same browser profile during the 7-day window can open the diary. Logout clears `token`, `rawKey`, and expiry data immediately.
+
+The backend auth responses expose `diaryKey` rather than the legacy `kdfSalt` terminology, so the design stays aligned with the current API shape.
 
 ## Encryption Model
 

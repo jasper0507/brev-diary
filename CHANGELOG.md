@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- Settings menu now includes a password reset shortcut that opens the forgot-password flow with the current account email prefilled.
+- Updated the real-data-loop design doc to use the current `diaryKey` terminology instead of the legacy `kdfSalt` wording.
+
 ## [v1.0.0] - 2026-04-26
 
 ### Added
