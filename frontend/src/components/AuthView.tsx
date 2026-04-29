@@ -6,13 +6,15 @@ import { createStoredSession, saveSession, type StoredSession } from '../session
 type AuthMode = 'login' | 'register' | 'forgot';
 
 type AuthViewProps = {
+  initialEmail?: string;
+  initialMode?: AuthMode;
   onAuthenticated: (session: StoredSession, key: CryptoKey | unknown) => void;
   onPreview: () => void;
 };
 
-export function AuthView({ onAuthenticated, onPreview }: AuthViewProps) {
-  const [mode, setMode] = useState<AuthMode>('login');
-  const [email, setEmail] = useState('');
+export function AuthView({ initialEmail = '', initialMode = 'login', onAuthenticated, onPreview }: AuthViewProps) {
+  const [mode, setMode] = useState<AuthMode>(initialMode);
+  const [email, setEmail] = useState(initialEmail);
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [message, setMessage] = useState('');

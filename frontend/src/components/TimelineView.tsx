@@ -13,6 +13,7 @@ type TimelineViewProps = {
   showSettings: boolean;
   onFilterChange: (filter: 'all' | 'favorite') => void;
   onToggleSettings: () => void;
+  onChangePassword: () => void;
   onOpenTrash: () => void;
   onLogout: () => void;
   onOpenToday: () => void;
@@ -31,6 +32,7 @@ export function TimelineView({
   showSettings,
   onFilterChange,
   onToggleSettings,
+  onChangePassword,
   onOpenTrash,
   onLogout,
   onOpenToday,
@@ -62,6 +64,11 @@ export function TimelineView({
               {mode === 'preview' && (
                 <button type="button" onClick={onLogout}>
                   返回登录
+                </button>
+              )}
+              {mode === 'real' && (
+                <button type="button" onClick={onChangePassword}>
+                  修改密码
                 </button>
               )}
               {mode === 'real' && (

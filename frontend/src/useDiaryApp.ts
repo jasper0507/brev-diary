@@ -28,6 +28,8 @@ type SessionState = { session: StoredSession; key: CryptoKey | unknown };
 
 export function useDiaryApp(initialPreview = false) {
   const [mode, setMode] = useState<AppMode>(initialPreview ? 'preview' : 'auth');
+  const [authMode, setAuthMode] = useState<'login' | 'register' | 'forgot'>('login');
+  const [authEmail, setAuthEmail] = useState('');
   const [sessionState, setSessionState] = useState<SessionState | null>(null);
   const [entries, setEntries] = useState<Entry[]>(initialPreview ? initialEntries : []);
   const [filter, setFilter] = useState<'all' | 'favorite'>('all');
@@ -109,6 +111,8 @@ export function useDiaryApp(initialPreview = false) {
 
   function enterPreview() {
     clearAutoSave();
+    setAuthMode('login');
+    setAuthEmail('');
     setEntries(initialEntries);
     setMode('preview');
     setLoadState('idle');
@@ -116,6 +120,8 @@ export function useDiaryApp(initialPreview = false) {
 
   function enterRealDiary(session: StoredSession, key: CryptoKey | unknown) {
     setAuthTokenProvider(() => session.token);
+    setAuthMode('login');
+    setAuthEmail('');
     setSessionState({ session, key });
     setMode('real');
     void loadRealEntries(key);
@@ -364,6 +370,15 @@ export function useDiaryApp(initialPreview = false) {
   }
 
   function logout() {
+    resetToAuth('login', '');
+  }
+
+  function changePassword() {
+    if (!sessionState) return;
+    resetToAuth('forgot', sessionState.session.email);
+  }
+
+  function resetToAuth(nextAuthMode: 'login' | 'register' | 'forgot', nextEmail: string) {
     clearAutoSave();
     clearSession();
     setAuthTokenProvider(() => null);
@@ -374,6 +389,8 @@ export function useDiaryApp(initialPreview = false) {
     setTrashOpen(false);
     setTrashEntries([]);
     setLoadState('idle');
+    setAuthMode(nextAuthMode);
+    setAuthEmail(nextEmail);
     setMode('auth');
   }
 
@@ -416,7 +433,10 @@ export function useDiaryApp(initialPreview = false) {
     toggleSettings,
     dismissNotice,
     confirmCurrentDialog,
-    cancelCurrentDialog
+    cancelCurrentDialog,
+    authMode,
+    authEmail,
+    changePassword
   };
 }
 
